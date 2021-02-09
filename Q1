@@ -1,0 +1,48 @@
+import org.apache.spark.sql.SparkSession
+object SparkSQL50 {
+  //Create 4 tables(Course, Score, Student, Teacher)
+  case class Course(course_id: Int, course_name: String, teacher_id: Int)
+  case class Score(student_id: Int, course_id: Int, score: Int)
+  case class Student(student_id: Int, student_name: String, birth: String, sex: String)
+  case class Teacher(teacher_id: Int, teacher_name: String)
+
+  def main(args: Array[String]): Unit = {
+    //Path of each files
+    val coursepath = "file:///usr/local/spark/mycode/50q/course.txt"
+    val scorepath = "file:///usr/local/spark/mycode/50q/score.txt"
+    val stupath = "file:///usr/local/spark/mycode/50q/student.txt"
+    val tchpath = "file:///usr/local/spark/mycode/50q/teacher.txt"
+    //Create SparkSession and SparkContext
+    val spark = SparkSession.builder().appName("SparkSQL50").master("local[*]").getOrCreate()
+    val sc = spark.sparkContext
+    import spark.implicits._
+    //Create RDD for each file
+    val courseRDD = sc.textFile(coursepath).map(_.split("\\s+"))
+    val scoreRDD = sc.textFile(scorepath).map(_.split("\\s+"))
+    val stuRDD = sc.textFile(stupath).map(_.split("\\s+"))
+    val tchRDD = sc.textFile(tchpath).map(_.split("\\s+"))
+    //Create DF
+    val courseDF = courseRDD.map(x => Course(x(0).toInt, x(1).toString, x(2).toInt)).toDF()
+    val scoreDF = scoreRDD.map(x => Score(x(0).toInt, x(1).toInt, x(2).toInt)).toDF()
+    val stuDF = stuRDD.map(x => Student(x(0).toInt, x(1).toString, x(2).toString, x(3).toString)).toDF()
+    val tchDF = tchRDD.map(x => Teacher(x(0).toInt, x(1).toString)).toDF()
+    //Create tempView
+    courseDF.createOrReplaceTempView("Course")
+    scoreDF.createOrReplaceTempView("Score")
+    stuDF.createOrReplaceTempView("Student")
+    tchDF.createOrReplaceTempView("Teacher")
+    //Query students' information whose course-01 score higher than course-02 score.
+    val res=spark.sql(
+    "select S.*, s1, s2\nfrom(\n  select student_id, s1, s2\n    from(\n    select student_id, score as s1\n    from Score\n    where course_id = 1\n  )t1\n    join(\n      select student_id, score as s2\n        from Score\n        where course_id = 2\n    )t2 using( student_id)\n    where s1 > s2\n)t\nleft join Student S using(student_id)"
+      )
+    res.show()
+  }
+}
+
+
++------------+----------+---+---+---+
+|student_name|     birth|sex| s1| s2|
++------------+----------+---+---+---+
+|          李云|1990-08-06|  男| 50| 30|
+|          钱电|1990-12-21|  男| 70| 60|
++------------+----------+---+---+---+
